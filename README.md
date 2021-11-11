@@ -11,3 +11,5 @@ docker ps -a
 ```bash
 something windows cannot show
 ```
+
+windows terminal + ohmyzsh + https://windowsterminalthemes.dev/ + https://www.guidgen.com/
