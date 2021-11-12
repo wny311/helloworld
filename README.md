@@ -1,10 +1,10 @@
 # helloworld
 
 ## 个人笔记
-### windows terminal
+## :memo: windows terminal
 windows terminal + ohmyzsh + [windows terminal themes](https://windowsterminalthemes.dev/) + [gui generator](https://www.guidgen.com/)
 
-### vim 清除高亮 
+## :memo: vim 清除高亮 
 ```
 :noh
 ```
