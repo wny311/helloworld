@@ -12,4 +12,4 @@ docker ps -a
 something windows cannot show
 ```
 
-windows terminal + ohmyzsh + https://windowsterminalthemes.dev/ + https://www.guidgen.com/
+windows terminal + ohmyzsh + [windows terminal themes](https://windowsterminalthemes.dev/) + [gui generator](https://www.guidgen.com/)
