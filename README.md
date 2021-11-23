@@ -8,3 +8,6 @@ windows terminal + ohmyzsh + [windows terminal themes](https://windowsterminalth
 ```
 :noh
 ```
+
+## :memo: 1123
+use vps(vultr) to sync gcr.io images
