@@ -11,3 +11,7 @@ windows terminal + ohmyzsh + [windows terminal themes](https://windowsterminalth
 
 ## :memo: 1123
 use vps(vultr) to sync gcr.io images
+
+
+## :memo: grafana dashboard
+[云原生devops](https://github.com/starsliao/Prometheus)
