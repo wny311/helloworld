@@ -33,3 +33,5 @@ grub2-set-default "CentOS Linux (4.4.248-1.el7.elrepo.x86_64) 7 (Core)"
 ```
 grub2-editenv list
 ```
+
+> gaoliangxianshi
