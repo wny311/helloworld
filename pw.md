@@ -1,4 +1,4 @@
-## todoist
+## todoist && ticktick
 ```
 quu{i{F?ah4fie7she
 ```
