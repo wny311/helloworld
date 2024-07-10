@@ -18,7 +18,7 @@ ge_u3Uo6tohf
 
 ## vpn 
 ```
-B$Fwy%z&T9Xr
+ge_u3Uo6tohf
 ```
 
 ## cloud tencent
