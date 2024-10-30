@@ -39,10 +39,10 @@ fn main() {
   
     // 创建SmsRequest实例  
     let sms_request = SmsRequest {  
-        ip = '10.11.26.210',  
+        ip: "10.11.26.210".to_string(),  
         mess: mess.to_string(),  
-        platformno = 'zabbix',  
-        port = '0',  
+        platformno: "zabbix".to_string(),  
+        port: "0".to_string(),  
         userlist: phone_numbers,  
     };  
   
@@ -51,10 +51,9 @@ fn main() {
   
     // 创建reqwest客户端并发送POST请求  
     let client = Client::new();  
-    let headers = vec![(CONTENT_TYPE, HeaderValue::from_static("application/json"))];  
     let response = client  
         .post(api_url)  
-        .headers(headers)  
+        .header(CONTENT_TYPE, "application/json")  
         .json(&sms_request) // 将SmsRequest序列化为JSON并作为请求体发送  
         .send();  
   
