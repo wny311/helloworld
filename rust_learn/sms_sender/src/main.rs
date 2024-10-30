@@ -23,7 +23,10 @@ async fn main() {
     println!("  ip: 10.11.26.210");
     println!("  platformNo: zabbix");
     println!("  port: 0");
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3)) // 设置超时时间为3秒
+        .build()
+        .expect("Failed to build client");
     
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
