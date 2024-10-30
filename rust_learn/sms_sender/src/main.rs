@@ -5,6 +5,7 @@ use std::time::Instant;
 
 #[tokio::main]
 async fn main() {
+    let start_time = Instant::now();
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         eprintln!("Usage: {} <mess> <userlist>", args[0]);
