@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;  
 use std::env;  
 use std::collections::HashMap;  
+use tokio; // 引入tokio运行时  
   
 // 请求结构体，根据API文档调整字段  
 #[derive(Serialize)]  
@@ -23,7 +24,8 @@ struct ApiResponse {
     message: String,  
 }  
   
-fn main() {  
+#[tokio::main] // 标记main函数为异步入口点
+async fn main() {  
     // 从命令行参数获取参数，第一个参数是程序名，后面依次是mess, 一个或多个手机号  
     let args: Vec<String> = env::args().collect();  
     if args.len() < 3 {  
@@ -35,7 +37,7 @@ fn main() {
     let mess = &args[1];  
     // let platformno = &args[3];  
     // let port = &args[4];  
-    let phone_numbers: Vec<String> = args[5..].to_vec(); // 收集所有剩余的参数作为手机号列表  
+    let phone_numbers: Vec<String> = args[2..].to_vec(); // 收集所有剩余的参数作为手机号列表  
   
     // 创建SmsRequest实例  
     let sms_request = SmsRequest {  
@@ -53,9 +55,10 @@ fn main() {
     let client = Client::new();  
     let response = client  
         .post(api_url)  
-        .header(CONTENT_TYPE, "application/json")  
+        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))  
         .json(&sms_request) // 将SmsRequest序列化为JSON并作为请求体发送  
-        .send();  
+        .send()
+        .await;  
   
     // 处理响应  
     match response {  
