@@ -1,7 +1,7 @@
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde_json::json;
 use std::env;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 #[tokio::main]
 async fn main() {
