@@ -1,6 +1,7 @@
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde_json::json;
 use std::env;
+use std::time::Instant;
 
 #[tokio::main]
 async fn main() {
@@ -27,8 +28,10 @@ async fn main() {
         "platformNo": "zabbix",
         "port": "0",
     });
+    let request = client.post(url).headers(headers.clone()).json(&body);
+    println!("Request object: {:?}", request);
 
-    match client.post(url).headers(headers).json(&body).send().await {
+    match request.send().await {
         Ok(response) => {
             println!("Response: {:?}", response.text().await.unwrap());
         }
@@ -36,4 +39,7 @@ async fn main() {
             eprintln!("Error: {}", e);
         }
     }
+
+    let duration = start_time.elapsed();
+    println!("Execution time: {:?}", duration);
 }
