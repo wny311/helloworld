@@ -32,10 +32,10 @@ async fn main() {
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
     let body = json!({
-        "userlist": userlist,
+        "userList": userlist,
         "mess": mess,
         "ip": "10.11.26.210",
-        "platformNo": "zabbix",
+        "plateformNo": "zabbix",
         "port": "0",
     });
     let request = client.post(url).headers(headers.clone()).json(&body);
