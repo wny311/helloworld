@@ -16,13 +16,13 @@ async fn main() {
     let userlist: Vec<&str> = args[2..].iter().map(|s| s.as_str()).collect();
 
     let url = "http://10.11.26.115:8080/api/aiops/message/template/pushSMS";
-    println!("Requesting URL: {}", url);
-    println!("Parameters:");
-    println!("  userlist: {:?}", userlist);
-    println!("  mess: {}", mess);
-    println!("  ip: 10.11.26.210");
-    println!("  platformNo: zabbix");
-    println!("  port: 0");
+    //println!("Requesting URL: {}", url);
+    //println!("Parameters:");
+    //println!("  userList: {:?}", userlist);
+    //println!("  mess: {}", mess);
+    //println!("  ip: 10.11.26.210");
+    //println!("  plateformNo: zabbix");
+    //println!("  port: 0");
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3)) // 设置超时时间为3秒
         .build()
@@ -38,6 +38,7 @@ async fn main() {
         "plateformNo": "zabbix",
         "port": "0",
     });
+    println!("{}",body.to_string());
     let request = client.post(url).headers(headers.clone()).json(&body);
     println!("Request object: {:?}", request);
 
