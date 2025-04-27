@@ -18,11 +18,12 @@ struct ModelRequest {
     inputs: Inputs,
     response_mode: String,
     user: String,
+    query: String,
 }
 
 #[derive(Debug, Serialize)]
 struct Inputs {
-    query: String,
+    problem: String,
 }
 
 // 大模型响应结构
@@ -89,10 +90,11 @@ async fn query_model(client: &Client, message: &str) -> Result<ModelResponse, re
     
     let request = ModelRequest {
         inputs: Inputs {
-            query: message.to_string(),
+            problem: message.to_string(),
         },
         response_mode: "blocking".to_string(),
         user: "zabbix".to_string(),
+        query: "请帮我解决问题".to_string(),
     };
 
     let response = client
