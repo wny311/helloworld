@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn query_model(client: &Client, message: &str) -> Result<ModelResponse, reqwest::Error> {
-    let api_key = "app-Y5OCPrGUfW6aD9pKPhdIWSqt"; // 建议改为从环境变量读取
+    let api_key = "app-t6gQF5UPPNZqIL71JRrfYPze"; // 建议改为从环境变量读取
     let url = "http://172.20.60.200/v1/completion-messages";
     
     let request = ModelRequest {
