@@ -96,7 +96,14 @@ async fn query_model(client: &Client, message: &str) -> Result<ModelResponse, re
         user: "zabbix".to_string(),
         query: "请帮我解决问题".to_string(),
     };
+    
+    println!("[DEBUG] 请求构造完成：");
+    println!("URL: {}", url);
+    println!("Headers:");
+    println!("  Authorization: Bearer {}", api_key);
+    println!("Body:\n{}", serde_json::to_string_pretty(&request).unwrap());
 
+    let start = std::time::Instant::now();
     let response = client
         .post(url)
         .header("Authorization", format!("Bearer {}", api_key))
@@ -105,6 +112,23 @@ async fn query_model(client: &Client, message: &str) -> Result<ModelResponse, re
         .await?
         .json::<ModelResponse>()
         .await?;
+    let duration = start.elapsed();
+    
+    // 打印响应元信息
+    println!("\n[DEBUG] 收到响应：");
+    println!("耗时: {:?}", duration);
+    println!("状态码: {}", response.status());
+    println!("响应头:");
+    for (key, value) in response.headers().iter() {
+        println!("  {}: {:?}", key, value);
+    }
+    let raw_response = response.text().await?;
+    println!("原始响应体:\n{}\n", raw_response);
+    // 尝试解析响应
+    serde_json::from_str(&raw_response).map_err(|e| {
+        eprintln!("[ERROR] JSON解析失败: {}\n原始内容: {}", e, raw_response);
+        reqwest::Error::from(e)
+    })
 
     Ok(response)
 }
