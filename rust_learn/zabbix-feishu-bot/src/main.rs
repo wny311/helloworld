@@ -124,11 +124,6 @@ async fn query_model(client: &Client, message: &str) -> Result<ModelResponse, re
     }
     let raw_response = response.text().await?;
     println!("原始响应体:\n{}\n", raw_response);
-    // 尝试解析响应
-    serde_json::from_str(&raw_response).map_err(|e| {
-        eprintln!("[ERROR] JSON解析失败: {}\n原始内容: {}", e, raw_response);
-        reqwest::Error::from(e)
-    })
 
     Ok(response)
 }
