@@ -1,0 +1,51 @@
+networks:
+  local-net:
+    external: true
+services:
+  reverse-proxy:
+    # The official v2 Traefik docker image
+    image: traefik:v2.11
+    container_name: traefik-proxy
+    # Enables the web UI and tells Traefik to listen to docker
+    command: --api.insecure=true --providers.docker
+    restart: unless-stopped
+    networks: 
+      - local-net
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - traefik.enable=false
+
+  yum-proxy:
+    image: sonatype/nexus3:3.85.0
+    container_name: yum_proxy
+    hostname: yum-proxy
+    depends_on: 
+      - reverse-proxy
+    restart: unless-stopped
+    networks:
+      - local-net
+        #volumes:
+        #- ./data_yum:/nexus-data:rw
+    labels:
+      - traefik.http.routers.my-container.rule=Host(`mirrors.local`) 
+  httpd-proxy:
+    image: httpd:2.4.65-alpine3.22
+    container_name: httpd_proxy
+    depends_on: 
+      - reverse-proxy
+    hostname: httpd-proxy
+    restart: unless-stopped
+    networks:
+      - local-net
+    volumes:
+      - type: bind
+        source: /root/httpd/
+        target: /usr/local/apache2/htdocs/
+    labels:
+      - traefik.http.routers.my-se-container.rule=Host(`apache.local`)

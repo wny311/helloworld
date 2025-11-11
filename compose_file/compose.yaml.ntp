@@ -1,0 +1,23 @@
+networks: 
+  local-net: 
+    external: true
+
+services:
+  ntp:
+    build: .
+    image: registry.cn-beijing.aliyuncs.com/wny311/ntp
+    container_name: ntp
+    restart: always
+    networks:
+      - local-net
+    ports:
+      - 123:123/udp
+    read_only: true
+    tmpfs:
+      - /etc/chrony:rw,mode=1750
+      - /run/chrony:rw,mode=1750
+      - /var/lib/chrony:rw,mode=1750
+    environment:
+      - NTP_SERVERS="ntp1.aliyun.com,ntp2.aliyun.com,ntp3.aliyun.com,ntp4.aliyun.com"
+    labels: 
+      - traefik.enable=false
