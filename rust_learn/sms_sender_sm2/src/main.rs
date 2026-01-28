@@ -10,6 +10,8 @@ use std::time::Instant;
 use std::{env, fs, sync::Arc};
 use sm2::dsa::signature::Signer;
 use num_bigint::BigUint;
+use std::fs::OpenOptions;
+use std::io::Write;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,8 +22,24 @@ struct AppConfig {
     key_file_path: String,
 }
 
+// 全局日志写入函数
+fn log_to_file(message: &str) {
+    let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+    let log_entry = format!("[{}] {}\n", timestamp, message);
+    
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("sms_sender.log")
+        .expect("无法打开日志文件");
+        
+    file.write_all(log_entry.as_bytes()).expect("写入日志失败");
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    log_to_file("=== 短信发送程序启动 ===");
+
     // 1. 加载配置
     let config_data = fs::read_to_string("config.json")
         .map_err(|_| "找不到配置文件 config.json")?;
@@ -33,6 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         eprintln!("用法: {} <消息内容> <手机号1> <手机号2> ...", args[0]);
+        log_to_file(&format!("错误: 用法: {} <消息内容> <手机号1> <手机号2> ...", args[0]));
         return Ok(());
     }
 
@@ -41,6 +60,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let filtered_msg = mask_ipv4(original_msg);
     let message_content = Arc::new(filtered_msg);
     let mobile_list: Vec<String> = args[2..].to_vec();
+
+    log_to_file(&format!("待发送手机号数量: {}", mobile_list.len()));
 
     // 4. 加载私钥原始字节 (32字节)
     let sk_bytes = load_private_key_bytes(&config.key_file_path)?;
@@ -54,6 +75,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("开始并发发送短信任务...");
+    log_to_file("开始并发发送短信任务...");
+
     let start_time = Instant::now();
 
     // 6. 循环创建并发任务
@@ -69,11 +92,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match send_single_sms(client, &mobile, &msg, &sk_bytes, cfg).await {
                 Ok(_) => {
                     let duration = task_start.elapsed();
-                    println!("任务耗时: {:.3}s", duration.as_secs_f64());
+                    let success_msg = format!("任务耗时: {:.3}s", duration.as_secs_f64());
+                    println!("{}", success_msg);
+                    log_to_file(&format!("成功发送短信到 {}: {}", mobile, success_msg));
                 },
                 Err(e) => {
                     let duration = task_start.elapsed();
-                    eprintln!("任务耗时: {:.3}s, 错误: {}", duration.as_secs_f64(), e);
+                    let error_msg = format!("任务耗时: {:.3}s, 错误: {}", duration.as_secs_f64(), e);
+                    eprintln!("{}", error_msg);
+                    log_to_file(&format!("发送短信到 {} 失败: {}", mobile, error_msg));
                 }
             }
         });
@@ -83,7 +110,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     join_all(tasks).await;
 
     let total_duration = start_time.elapsed();
-    println!("所有任务处理完毕，总耗时: {:.3}s", total_duration.as_secs_f64());
+    let total_msg = format!("所有任务处理完毕，总耗时: {:.3}s", total_duration.as_secs_f64());
+    println!("{}", total_msg);
+    log_to_file(&total_msg);
+    log_to_file("=== 短信发送程序结束 ===");
+
     Ok(())
 }
 
@@ -169,10 +200,18 @@ async fn send_single_sms(
     sk_bytes: &[u8],
     config: Arc<AppConfig>,
 ) -> Result<(), String> {
+    let log_prefix = format!("手机号: {}", mobile);
+    
+    log_to_file(&format!("{} 开始发送短信", log_prefix));
+
     // 使用默认的distid，这是一个字符串
     let distid = "1234567812345678"; // 这是一个示例distid，根据实际情况调整
     let signing_key = SigningKey::from_slice(distid, sk_bytes)
-        .map_err(|e| format!("私钥构造失败 [{}]: {:?}", mobile, e))?;
+        .map_err(|e| {
+            let err_msg = format!("私钥构造失败 [{}]: {:?}", mobile, e);
+            log_to_file(&err_msg);
+            err_msg
+        })?;
     
     let timestamp = Utc::now().timestamp_millis();
 
@@ -191,11 +230,19 @@ async fn send_single_sms(
     
     // 使用sm2进行签名
     let signature_result = signing_key.try_sign(sign_bytes);
-    let signature: Signature = signature_result.map_err(|e| format!("签名失败: {:?}", e))?;
+    let signature: Signature = signature_result.map_err(|e| {
+        let err_msg = format!("签名失败: {:?}", e);
+        log_to_file(&format!("{} {}", log_prefix, err_msg));
+        err_msg
+    })?;
 
     // 将签名转换为DER格式，以便与Java BC库兼容
     let signature_der = signature_to_der_format(&signature)
-        .map_err(|e| format!("签名转DER失败: {:?}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("签名转DER失败: {:?}", e);
+            log_to_file(&format!("{} {}", log_prefix, err_msg));
+            err_msg
+        })?;
     let signature_hex = hex::encode(signature_der).to_uppercase();
 
     let body_str = format!(
@@ -205,27 +252,37 @@ async fn send_single_sms(
 
     // 打印完整的请求体
     println!("请求体: {}", body_str);
+    log_to_file(&format!("{} 请求体: {}", log_prefix, body_str));
 
     let response = client.post(&config.api_url)
         .header("Content-Type", "application/json")
         .body(body_str)
         .send()
         .await
-        .map_err(|e| format!("网络错误: {}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("网络错误: {}", e);
+            log_to_file(&format!("{} {}", log_prefix, err_msg));
+            err_msg
+        })?;
 
     let status = response.status();
     let text = response.text().await.unwrap_or_default();
 
     if status.is_success() {
         println!("成功: {}", mobile);
+        log_to_file(&format!("{} 发送成功", log_prefix));
         Ok(())
     } else {
-        Err(format!("失败 [{}]: {} - {}", mobile, status, text))
+        let err_msg = format!("失败 [{}]: {} - {}", mobile, status, text);
+        log_to_file(&format!("{} {}", log_prefix, err_msg));
+        Err(err_msg)
     }
 }
 
 /// 解析 PEM 获取 32 字节私钥
 fn load_private_key_bytes(path: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    log_to_file(&format!("加载私钥文件: {}", path));
+    
     let content = fs::read_to_string(path)?;
     let b64_content = content
         .lines()
@@ -239,20 +296,30 @@ fn load_private_key_bytes(path: &str) -> Result<Vec<u8>, Box<dyn std::error::Err
     if let Some(pos) = der_bytes.windows(2).position(|w| w == [0x04, 0x20]) {
         let start = pos + 2;
         if der_bytes.len() >= start + 32 {
+            log_to_file("从PKCS#8格式成功提取私钥");
             return Ok(der_bytes[start..start + 32].to_vec());
         }
     }
     
     // 兜底：取最后32字节
     if der_bytes.len() >= 32 {
+        log_to_file("使用兜底策略提取私钥");
         Ok(der_bytes[der_bytes.len() - 32..].to_vec())
     } else {
-        Err("私钥长度不足 32 字节".into())
+        let err_msg = "私钥长度不足 32 字节";
+        log_to_file(err_msg);
+        Err(err_msg.into())
     }
 }
 
 /// IPv4 脱敏：192.168.1.1 -> 1.1
 fn mask_ipv4(text: &str) -> String {
     let re = Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})").unwrap();
-    re.replace_all(text, "$3.$4").to_string()
+    let result = re.replace_all(text, "$3.$4").to_string();
+    
+    if text != result {
+        log_to_file("检测到IP地址并进行了脱敏处理");
+    }
+    
+    result
 }
