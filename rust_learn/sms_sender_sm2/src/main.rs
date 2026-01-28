@@ -22,23 +22,64 @@ struct AppConfig {
     key_file_path: String,
 }
 
-// 全局日志写入函数
+// 全局日志写入函数，只有在调试模式下才写入文件
+static mut DEBUG_MODE: bool = false;
+
+fn set_debug_mode(debug: bool) {
+    unsafe {
+        DEBUG_MODE = debug;
+    }
+}
+
+fn is_debug_mode() -> bool {
+    unsafe { DEBUG_MODE }
+}
+
 fn log_to_file(message: &str) {
-    let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
-    let log_entry = format!("[{}] {}\n", timestamp, message);
-    
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("sms_sender.log")
-        .expect("无法打开日志文件");
+    if is_debug_mode() {
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+        let log_entry = format!("[{}] {}\n", timestamp, message);
         
-    file.write_all(log_entry.as_bytes()).expect("写入日志失败");
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("sms_sender.log")
+            .expect("无法打开日志文件");
+            
+        file.write_all(log_entry.as_bytes()).expect("写入日志失败");
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    log_to_file("=== 短信发送程序启动 ===");
+    // 解析命令行参数
+    let args: Vec<String> = env::args().collect();
+    
+    // 检查是否有 --debug 参数
+    let debug_mode = args.contains(&"--debug".to_string());
+    set_debug_mode(debug_mode);
+    
+    // 找到实际参数的位置（跳过 --debug 参数）
+    let actual_args: Vec<String> = if debug_mode {
+        args.iter()
+            .filter(|arg| *arg != "--debug")
+            .cloned()
+            .collect()
+    } else {
+        args.clone()
+    };
+    
+    if actual_args.len() < 3 {
+        eprintln!("用法: {} [--debug] <消息内容> <手机号1> <手机号2> ...", actual_args[0]);
+        if debug_mode {
+            log_to_file(&format!("错误: 用法: {} [--debug] <消息内容> <手机号1> <手机号2> ...", actual_args[0]));
+        }
+        return Ok(());
+    }
+
+    if debug_mode {
+        log_to_file("=== 短信发送程序启动 (调试模式) ===");
+    }
 
     // 1. 加载配置
     let config_data = fs::read_to_string("config.json")
@@ -47,27 +88,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("配置文件格式错误: {}", e))?;
     let config = Arc::new(config);
 
-    // 2. 解析命令行参数
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
-        eprintln!("用法: {} <消息内容> <手机号1> <手机号2> ...", args[0]);
-        log_to_file(&format!("错误: 用法: {} <消息内容> <手机号1> <手机号2> ...", args[0]));
-        return Ok(());
+    // 2. 解析命令行参数（排除 --debug）
+    let original_msg = &actual_args[1];
+    let filtered_msg = mask_and_format_text(original_msg);
+    let message_content = Arc::new(filtered_msg);
+    let mobile_list: Vec<String> = actual_args[2..].to_vec();
+
+    if debug_mode {
+        log_to_file(&format!("待发送手机号数量: {}", mobile_list.len()));
     }
 
-    // 3. IP 脱敏处理
-    let original_msg = &args[1];
-    let filtered_msg = mask_ipv4(original_msg);
-    let message_content = Arc::new(filtered_msg);
-    let mobile_list: Vec<String> = args[2..].to_vec();
-
-    log_to_file(&format!("待发送手机号数量: {}", mobile_list.len()));
-
-    // 4. 加载私钥原始字节 (32字节)
+    // 3. 加载私钥原始字节 (32字节)
     let sk_bytes = load_private_key_bytes(&config.key_file_path)?;
     let sk_bytes_arc = Arc::new(sk_bytes);
 
-    // 5. 初始化 HTTP 客户端
+    // 4. 初始化 HTTP 客户端
     let client = Arc::new(
         reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30)) // 增加超时时间
@@ -75,11 +110,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("开始并发发送短信任务...");
-    log_to_file("开始并发发送短信任务...");
+    if debug_mode {
+        log_to_file("开始并发发送短信任务...");
+    }
 
     let start_time = Instant::now();
 
-    // 6. 循环创建并发任务
+    // 5. 循环创建并发任务
     let mut tasks = Vec::new();
     for mobile in mobile_list {
         let client = Arc::clone(&client);
@@ -94,13 +131,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let duration = task_start.elapsed();
                     let success_msg = format!("任务耗时: {:.3}s", duration.as_secs_f64());
                     println!("{}", success_msg);
-                    log_to_file(&format!("成功发送短信到 {}: {}", mobile, success_msg));
+                    if is_debug_mode() {
+                        log_to_file(&format!("成功发送短信到 {}: {}", mobile, success_msg));
+                    }
                 },
                 Err(e) => {
                     let duration = task_start.elapsed();
                     let error_msg = format!("任务耗时: {:.3}s, 错误: {}", duration.as_secs_f64(), e);
                     eprintln!("{}", error_msg);
-                    log_to_file(&format!("发送短信到 {} 失败: {}", mobile, error_msg));
+                    if is_debug_mode() {
+                        log_to_file(&format!("发送短信到 {} 失败: {}", mobile, error_msg));
+                    }
                 }
             }
         });
@@ -112,8 +153,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let total_duration = start_time.elapsed();
     let total_msg = format!("所有任务处理完毕，总耗时: {:.3}s", total_duration.as_secs_f64());
     println!("{}", total_msg);
-    log_to_file(&total_msg);
-    log_to_file("=== 短信发送程序结束 ===");
+    if debug_mode {
+        log_to_file(&total_msg);
+        log_to_file("=== 短信发送程序结束 ===");
+    }
 
     Ok(())
 }
@@ -202,14 +245,18 @@ async fn send_single_sms(
 ) -> Result<(), String> {
     let log_prefix = format!("手机号: {}", mobile);
     
-    log_to_file(&format!("{} 开始发送短信", log_prefix));
+    if is_debug_mode() {
+        log_to_file(&format!("{} 开始发送短信", log_prefix));
+    }
 
     // 使用默认的distid，这是一个字符串
     let distid = "1234567812345678"; // 这是一个示例distid，根据实际情况调整
     let signing_key = SigningKey::from_slice(distid, sk_bytes)
         .map_err(|e| {
             let err_msg = format!("私钥构造失败 [{}]: {:?}", mobile, e);
-            log_to_file(&err_msg);
+            if is_debug_mode() {
+                log_to_file(&err_msg);
+            }
             err_msg
         })?;
     
@@ -232,7 +279,9 @@ async fn send_single_sms(
     let signature_result = signing_key.try_sign(sign_bytes);
     let signature: Signature = signature_result.map_err(|e| {
         let err_msg = format!("签名失败: {:?}", e);
-        log_to_file(&format!("{} {}", log_prefix, err_msg));
+        if is_debug_mode() {
+            log_to_file(&format!("{} {}", log_prefix, err_msg));
+        }
         err_msg
     })?;
 
@@ -240,7 +289,9 @@ async fn send_single_sms(
     let signature_der = signature_to_der_format(&signature)
         .map_err(|e| {
             let err_msg = format!("签名转DER失败: {:?}", e);
-            log_to_file(&format!("{} {}", log_prefix, err_msg));
+            if is_debug_mode() {
+                log_to_file(&format!("{} {}", log_prefix, err_msg));
+            }
             err_msg
         })?;
     let signature_hex = hex::encode(signature_der).to_uppercase();
@@ -252,7 +303,9 @@ async fn send_single_sms(
 
     // 打印完整的请求体
     println!("请求体: {}", body_str);
-    log_to_file(&format!("{} 请求体: {}", log_prefix, body_str));
+    if is_debug_mode() {
+        log_to_file(&format!("{} 请求体: {}", log_prefix, body_str));
+    }
 
     let response = client.post(&config.api_url)
         .header("Content-Type", "application/json")
@@ -261,7 +314,9 @@ async fn send_single_sms(
         .await
         .map_err(|e| {
             let err_msg = format!("网络错误: {}", e);
-            log_to_file(&format!("{} {}", log_prefix, err_msg));
+            if is_debug_mode() {
+                log_to_file(&format!("{} {}", log_prefix, err_msg));
+            }
             err_msg
         })?;
 
@@ -270,18 +325,24 @@ async fn send_single_sms(
 
     if status.is_success() {
         println!("成功: {}", mobile);
-        log_to_file(&format!("{} 发送成功", log_prefix));
+        if is_debug_mode() {
+            log_to_file(&format!("{} 发送成功", log_prefix));
+        }
         Ok(())
     } else {
         let err_msg = format!("失败 [{}]: {} - {}", mobile, status, text);
-        log_to_file(&format!("{} {}", log_prefix, err_msg));
+        if is_debug_mode() {
+            log_to_file(&format!("{} {}", log_prefix, err_msg));
+        }
         Err(err_msg)
     }
 }
 
 /// 解析 PEM 获取 32 字节私钥
 fn load_private_key_bytes(path: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    log_to_file(&format!("加载私钥文件: {}", path));
+    if is_debug_mode() {
+        log_to_file(&format!("加载私钥文件: {}", path));
+    }
     
     let content = fs::read_to_string(path)?;
     let b64_content = content
@@ -296,29 +357,41 @@ fn load_private_key_bytes(path: &str) -> Result<Vec<u8>, Box<dyn std::error::Err
     if let Some(pos) = der_bytes.windows(2).position(|w| w == [0x04, 0x20]) {
         let start = pos + 2;
         if der_bytes.len() >= start + 32 {
-            log_to_file("从PKCS#8格式成功提取私钥");
+            if is_debug_mode() {
+                log_to_file("从PKCS#8格式成功提取私钥");
+            }
             return Ok(der_bytes[start..start + 32].to_vec());
         }
     }
     
     // 兜底：取最后32字节
     if der_bytes.len() >= 32 {
-        log_to_file("使用兜底策略提取私钥");
+        if is_debug_mode() {
+            log_to_file("使用兜底策略提取私钥");
+        }
         Ok(der_bytes[der_bytes.len() - 32..].to_vec())
     } else {
         let err_msg = "私钥长度不足 32 字节";
-        log_to_file(err_msg);
+        if is_debug_mode() {
+            log_to_file(err_msg);
+        }
         Err(err_msg.into())
     }
 }
 
-/// IPv4 脱敏：192.168.1.1 -> 1.1
-fn mask_ipv4(text: &str) -> String {
+/// 文本处理：IPv4 脱敏 + 换行符处理
+fn mask_and_format_text(text: &str) -> String {
+    // 首先处理换行符：替换为指定字符，避免API返回400错误
+    let text_with_line_breaks_replaced = text.replace("\n", "\\n").replace("\r", "\\r");
+    
+    // 然后进行IP脱敏
     let re = Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})").unwrap();
-    let result = re.replace_all(text, "$3.$4").to_string();
+    let result = re.replace_all(&text_with_line_breaks_replaced, "$3.$4").to_string();
     
     if text != result {
-        log_to_file("检测到IP地址并进行了脱敏处理");
+        if is_debug_mode() {
+            log_to_file("检测到IP地址并进行了脱敏处理");
+        }
     }
     
     result
